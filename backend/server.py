@@ -1,5 +1,6 @@
 import asyncio
 import re
+from handlers import index
 
 class HTTPServer:
     def __init__(self, host='127.0.0.1', port=8000):
@@ -8,22 +9,16 @@ class HTTPServer:
         self.routes = []
 
     def route(self, path_pattern, method='GET'):
-        # Convierte la ruta con {param} en expresi�n regular
         pattern = '^' + re.sub(r'{(\w+)}', r'(?P<\1>[^/]+)', path_pattern) + '$'
         regex = re.compile(pattern)
-
         def decorator(func):
-            self.routes.append({
-                'method': method.upper(),
-                'pattern': regex,
-                'handler': func
-            })
+            self.routes.append({'method': method.upper(), 'pattern': regex, 'handler': func})
             return func
         return decorator
 
     async def handle_client(self, reader, writer):
-        data = await reader.read(1024)
-        request_text = data.decode()
+        data = await reader.read(65536)
+        request_text = data.decode(errors='ignore')
         request_line = request_text.splitlines()[0]
         method, path, _ = request_line.split()
 
@@ -53,24 +48,20 @@ class HTTPServer:
         writer.write(response.encode())
         await writer.drain()
         writer.close()
-    
+
     async def run(self):
+        print("Rutas registradas:")
+        for route in self.routes:
+            print(f"{route['method']} {route['pattern'].pattern}")
         server = await asyncio.start_server(self.handle_client, self.host, self.port)
         print(f"Server running on http://{self.host}:{self.port}")
         async with server:
             await server.serve_forever()
 
+server = HTTPServer()
 
-if __name__ == '__main__':
-    server = HTTPServer()
+# Registrar rutas
+server.route("/", method="GET")(index)
 
-    @server.route("/user/{user_id}", method="GET")
-    async def get_user(user_id):
-        return f"<h1>Usuario: {user_id}</h1>"
-
-    @server.route("/product/{category}/{product_id}", method="GET")
-    async def get_product(category, product_id):
-        return f"<h1>Producto {product_id} en categoría {category}</h1>"
-
-    import asyncio
-    asyncio.run(server.run())
+import asyncio
+asyncio.run(server.run())

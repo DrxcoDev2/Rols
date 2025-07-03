@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Ejemplo Motor Plantillas</title>
+</head>
+<body>
+    <p>Hola, {{ name }}!</p>
+
+    {% if age >= 18 %}
+    <p>Eres mayor de edad.</p>
+    {% else %}
+    <p>Eres menor de edad.</p>
+    {% endif %}
+
+    <ul>
+    {% for item in items %}
+      <li>{{ item }}</li>
+    {% endfor %}
+    </ul>
+</body>
+</html>
