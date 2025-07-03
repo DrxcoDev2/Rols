@@ -1,6 +1,6 @@
 import asyncio
 import re
-from handlers import index
+from handlers import index, login
 
 class HTTPServer:
     def __init__(self, host='127.0.0.1', port=8000):
@@ -22,6 +22,15 @@ class HTTPServer:
         request_line = request_text.splitlines()[0]
         method, path, _ = request_line.split()
 
+
+        headers, _, body = request_text.partition('\r\n\r\n')
+        headers_lines = headers.splitlines()[1:]  # Saltar request line
+        headers_dict = {}
+        for line in headers_lines:
+            if ':' in line:
+                k,v = line.split(':',1)
+                headers_dict[k.strip().lower()] = v.strip()
+
         handler = None
         path_params = {}
 
@@ -33,8 +42,24 @@ class HTTPServer:
                     path_params = match.groupdict()
                     break
 
+        parsed_body = None
+        if method == 'POST':
+            content_type = headers_dict.get('content-type','')
+            if 'application/x-www-form-urlencoded' in content_type:
+                import urllib.parse
+                parsed_body = urllib.parse.parse_qs(body)
+                parsed_body = {k: v[0] if len(v) == 1 else v for k,v in parsed_body.items()}
+            elif 'application/json' in content_type:
+                import json
+                try:
+                    parsed_body = json.loads(body)
+                except:
+                    parsed_body = None
+            else:
+                parsed_body = body
+
         if handler:
-            response_body = await handler(**path_params)
+            response_body = await handler(**path_params, body=parsed_body)
             response = (
                 "HTTP/1.1 200 OK\r\n"
                 "Content-Type: text/html\r\n"
@@ -60,8 +85,9 @@ class HTTPServer:
 
 server = HTTPServer()
 
-# Registrar rutas
+
 server.route("/", method="GET")(index)
+server.route("/login", method="POST")(login)
 
 import asyncio
 asyncio.run(server.run())
