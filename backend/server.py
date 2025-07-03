@@ -1,6 +1,20 @@
 import asyncio
 import re
-from handlers import index, login
+import uuid
+
+# Define la funci�n parse_cookies fuera de la clase, antes de usarla
+def parse_cookies(cookie_header):
+    cookies = {}
+    if not cookie_header:
+        return cookies
+    pairs = cookie_header.split(';')
+    for pair in pairs:
+        if '=' in pair:
+            k, v = pair.strip().split('=', 1)
+            cookies[k] = v
+    return cookies
+
+sessions = {}
 
 class HTTPServer:
     def __init__(self, host='127.0.0.1', port=8000):
@@ -22,14 +36,25 @@ class HTTPServer:
         request_line = request_text.splitlines()[0]
         method, path, _ = request_line.split()
 
-
         headers, _, body = request_text.partition('\r\n\r\n')
         headers_lines = headers.splitlines()[1:]  # Saltar request line
         headers_dict = {}
         for line in headers_lines:
             if ':' in line:
-                k,v = line.split(':',1)
+                k, v = line.split(':', 1)
                 headers_dict[k.strip().lower()] = v.strip()
+
+        cookie_header = headers_dict.get('cookie')
+        cookies = parse_cookies(cookie_header)
+
+        # Buscar sessionid en cookies
+        session_id = cookies.get('sessionid')
+        if session_id is None or session_id not in sessions:
+            # Crear sesi�n nueva
+            session_id = str(uuid.uuid4())
+            sessions[session_id] = {}
+
+        session = sessions[session_id]
 
         handler = None
         path_params = {}
@@ -59,10 +84,11 @@ class HTTPServer:
                 parsed_body = body
 
         if handler:
-            response_body = await handler(**path_params, body=parsed_body)
+            response_body = await handler(**path_params, body=parsed_body, session=session)
             response = (
                 "HTTP/1.1 200 OK\r\n"
                 "Content-Type: text/html\r\n"
+                f"Set-Cookie: sessionid={session_id}; HttpOnly; Path=/\r\n"
                 f"Content-Length: {len(response_body.encode())}\r\n"
                 "\r\n"
                 f"{response_body}"
@@ -83,11 +109,13 @@ class HTTPServer:
         async with server:
             await server.serve_forever()
 
-server = HTTPServer()
 
+
+from handlers import index, login
+
+server = HTTPServer()
 
 server.route("/", method="GET")(index)
 server.route("/login", method="POST")(login)
 
-import asyncio
 asyncio.run(server.run())

@@ -4,10 +4,14 @@ import os
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 TEMPLATE_DIR = os.path.join(BASE_DIR, 'templates')
 
-async def index(body=None, **kwargs):
+async def index(body=None, session=None, **kwargs):
+    count = session.get('count', 0) + 1
+    session['count'] = count
+
     tpl = SimpleTemplate(os.path.join(TEMPLATE_DIR, 'index.html'))
     html = tpl.render({
         'name': 'Nilx',
+        'visit_count': count,
         'age': 20,
         'items': ['manzana', 'pera', 'naranja']
     })
