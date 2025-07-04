@@ -1,9 +1,12 @@
 import asyncio
 import re
 import uuid
+import urllib.parse
+import json
 
-# Función para parsear cookies
-def parse_cookies(cookie_header):
+MAX_REQUEST_SIZE = 65536
+
+def parse_cookies(cookie_header: str) -> dict:
     cookies = {}
     if not cookie_header:
         return cookies
@@ -14,7 +17,6 @@ def parse_cookies(cookie_header):
             cookies[k] = v
     return cookies
 
-# Sesiones simples en memoria
 sessions = {}
 
 class HTTPServer:
@@ -33,15 +35,29 @@ class HTTPServer:
 
     async def handle_client(self, reader, writer):
         try:
-            data = await reader.read(65536)
+            data = await reader.read(MAX_REQUEST_SIZE)
             request_text = data.decode(errors='ignore')
 
             if not request_text.strip():
                 writer.close()
+                await writer.wait_closed()
                 return
 
-            request_line = request_text.splitlines()[0]
-            method, path, _ = request_line.split()
+            lines = request_text.splitlines()
+            if not lines:
+                response = "HTTP/1.1 400 Bad Request\r\n\r\nEmpty request"
+                writer.write(response.encode())
+                await writer.drain()
+                return
+
+            request_line = lines[0]
+            parts = request_line.split()
+            if len(parts) < 3:
+                response = "HTTP/1.1 400 Bad Request\r\n\r\nMalformed request line"
+                writer.write(response.encode())
+                await writer.drain()
+                return
+            method, path, _ = parts
 
             headers, _, body = request_text.partition('\r\n\r\n')
             headers_lines = headers.splitlines()[1:]
@@ -53,8 +69,6 @@ class HTTPServer:
 
             cookie_header = headers_dict.get('cookie')
             cookies = parse_cookies(cookie_header)
-
-            # Manejo de sesión
             session_id = cookies.get('sessionid')
             if session_id is None or session_id not in sessions:
                 session_id = str(uuid.uuid4())
@@ -64,11 +78,12 @@ class HTTPServer:
 
             handler = None
             path_params = {}
-
+            allowed_methods = set()
             for route in self.routes:
-                if route['method'] == method:
-                    match = route['pattern'].match(path)
-                    if match:
+                match = route['pattern'].match(path)
+                if match:
+                    allowed_methods.add(route['method'])
+                    if route['method'] == method:
                         handler = route['handler']
                         path_params = match.groupdict()
                         break
@@ -77,11 +92,9 @@ class HTTPServer:
             if method == 'POST':
                 content_type = headers_dict.get('content-type', '')
                 if 'application/x-www-form-urlencoded' in content_type:
-                    import urllib.parse
                     parsed_body = urllib.parse.parse_qs(body)
                     parsed_body = {k: v[0] if len(v) == 1 else v for k, v in parsed_body.items()}
                 elif 'application/json' in content_type:
-                    import json
                     try:
                         parsed_body = json.loads(body)
                     except:
@@ -91,15 +104,22 @@ class HTTPServer:
 
             if handler:
                 try:
-                    response_body = await handler(**path_params, body=parsed_body, session=session)
-                    response = (
-                        "HTTP/1.1 200 OK\r\n"
-                        "Content-Type: text/html\r\n"
-                        f"Set-Cookie: sessionid={session_id}; HttpOnly; Path=/\r\n"
-                        f"Content-Length: {len(response_body.encode())}\r\n"
-                        "\r\n"
-                        f"{response_body}"
-                    )
+                    result = await handler(**path_params, body=parsed_body, session=session)
+                    if isinstance(result, tuple):
+                        response_body, status, custom_headers = result + (None,) * (3 - len(result))
+                        status = status or "200 OK"
+                        custom_headers = custom_headers or []
+                    else:
+                        response_body = result
+                        status = "200 OK"
+                        custom_headers = []
+                    response_headers = [
+                        f"HTTP/1.1 {status}",
+                        "Content-Type: text/html",
+                        f"Set-Cookie: sessionid={session_id}; HttpOnly; Path=/",
+                        f"Content-Length: {len(response_body.encode())}"
+                    ] + custom_headers
+                    response = "\r\n".join(response_headers) + "\r\n\r\n" + response_body
                 except Exception as handler_error:
                     print(f"[ERROR] En handler: {handler_error}")
                     response = (
@@ -108,12 +128,18 @@ class HTTPServer:
                         "\r\n"
                         "Internal Server Error"
                     )
+            elif allowed_methods:
+                response = (
+                    "HTTP/1.1 405 Method Not Allowed\r\n"
+                    f"Allow: {', '.join(allowed_methods)}\r\n"
+                    "\r\n"
+                    "Method Not Allowed"
+                )
             else:
                 response = "HTTP/1.1 404 Not Found\r\n\r\nRoute not found"
 
             writer.write(response.encode())
             await writer.drain()
-
         except Exception as general_error:
             print(f"[ERROR] En el servidor: {general_error}")
         finally:
