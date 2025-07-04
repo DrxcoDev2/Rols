@@ -4,11 +4,11 @@ import uuid
 import urllib.parse
 import json
 from http.cookies import SimpleCookie
-from .static_handler import StaticFileHandler  # Cambia a import local si lo ejecutas así
+from .static_handler import StaticFileHandler  
 from inspect import signature
 from typing import Dict, Any, Optional, Tuple
 
-MAX_REQUEST_SIZE = 65536  # 64KB
+MAX_REQUEST_SIZE = 65536  
 sessions: Dict[str, dict] = {}
 
 class HTTPResponse:
@@ -28,7 +28,7 @@ class HTTPResponse:
         if isinstance(self.body, str):
             body_bytes = self.body.encode()
         else:
-            body_bytes = self.body  # ya bytes
+            body_bytes = self.body  
 
         headers = [
             f"HTTP/1.1 {self.status}",
@@ -69,7 +69,7 @@ class HTTPServer:
 
     def parse_request(self, request_text: str) -> Tuple[dict, str]:
         headers_raw, _, body = request_text.partition('\r\n\r\n')
-        headers_lines = headers_raw.splitlines()[1:]  # Skip request line
+        headers_lines = headers_raw.splitlines()[1:]  
         
         headers = {}
         for line in headers_lines:
@@ -112,7 +112,6 @@ class HTTPServer:
         return body
 
     async def handle_static(self, path: str) -> Optional[HTTPResponse]:
-        # path esperado: /static/xxx
         if not path.startswith('/static/'):
             return None
             

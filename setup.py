@@ -9,10 +9,11 @@ async def index():
     <html>
         <head>
             <link rel="stylesheet" href="/static/css/style.css">
+            <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
         </head>
         <body id="app" style="background: white">
             
-            <div class="">Welcome to Rols</div>
+            <div class="flex justify-center">Welcome to Rols</div>
             
         </body>
     </html>

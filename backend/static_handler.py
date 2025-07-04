@@ -1,7 +1,7 @@
 import mimetypes
 from urllib.parse import unquote
 from pathlib import Path
-import aiofiles  # Debes instalarlo: pip install aiofiles
+import aiofiles  
 
 class StaticFileHandler:
     def __init__(self, static_dir='static'):
@@ -23,7 +23,6 @@ class StaticFileHandler:
     def _is_safe_path(self, path: str) -> bool:
         try:
             requested_path = (self.static_dir / path).resolve()
-            # Verifica que requested_path est� dentro de self.static_dir
             return self.static_dir == requested_path or self.static_dir in requested_path.parents
         except (ValueError, TypeError):
             return False
@@ -50,7 +49,6 @@ class StaticFileHandler:
             headers = {
                 'Content-Type': content_type,
                 'Content-Length': str(len(content)),
-                # Para desarrollo evita cache; cambia a 'public, max-age=3600' para producci�n
                 'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
             }
             
