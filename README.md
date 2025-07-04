@@ -62,6 +62,16 @@ if __name__ == "__main__":
     import asyncio
     asyncio.run(server.run())
 ```
+## Consejos 
+```python
+"""
+use client
+use @backend 
+"""
+# para aclarar que todo esta conectado al backend 
+# mejora la velocidad y produce menos errores
+```
+
 
 # 🧠 Plantillas personalizadas
 ```html
