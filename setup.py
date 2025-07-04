@@ -1,27 +1,42 @@
-"""
-use client
-use @backend 
-"""
-
 from backend.server import HTTPServer
-from backend.templates import SimpleTemplate
+import asyncio
 
-server = HTTPServer()
+server = HTTPServer(static_dir='static')
 
-@server.route("/", method="GET")
-async def home(body=None, session=None, **kwargs):
-    tpl = SimpleTemplate("templates/index.html")
-    return tpl.render({'user': session.get('user', 'Invitado')})
+# Ruta normal
+@server.route('/')
+async def index():
+    return '''
+    <html>
+        <head>
+            <link rel="stylesheet" href="/static/css/style.css">
+        </head>
+        <body>
+            <h1>Welcome!</h1>
+            <img src="/static/images/logo.png">
+            <script src="/static/js/main.js"></script>
+        </body>
+    </html>
+    '''
 
-@server.route("/login", method="POST")
-async def login(body=None, session=None, **kwargs):
-    username = body.get('username')
-    password = body.get('password')
-    if username == 'admin' and password == '1234':
-        session['user'] = username
-        return "Login OK"
-    return "Login fallido"
 
-if __name__ == "__main__":
-    import asyncio
+import os
+
+os.makedirs('static/css', exist_ok=True)
+with open('static/css/style.css', 'w') as f:
+    f.write('''
+    body {
+        font-family: Arial, sans-serif;
+        margin: 40px;
+    }
+    ''')
+
+
+os.makedirs('static/js', exist_ok=True)
+with open('static/js/main.js', 'w') as f:
+    f.write('''
+    console.log('Static file system working!');
+    ''')
+
+if __name__ == '__main__':
     asyncio.run(server.run())
