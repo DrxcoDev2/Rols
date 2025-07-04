@@ -3,18 +3,19 @@ import re
 import uuid
 import urllib.parse
 import json
+import time
 from http.cookies import SimpleCookie
-from .static_handler import StaticFileHandler  
+from .static_handler import StaticFileHandler
 from inspect import signature
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, Union
 
-MAX_REQUEST_SIZE = 65536  
+MAX_REQUEST_SIZE = 65536
 sessions: Dict[str, dict] = {}
 
 class HTTPResponse:
     def __init__(
-        self, 
-        body: Any = "", 
+        self,
+        body: Any = "",
         status: str = "200 OK",
         content_type: str = "text/html",
         headers: Optional[Dict[str, str]] = None
@@ -28,20 +29,20 @@ class HTTPResponse:
         if isinstance(self.body, str):
             body_bytes = self.body.encode()
         else:
-            body_bytes = self.body  
+            body_bytes = self.body
 
         headers = [
             f"HTTP/1.1 {self.status}",
             f"Content-Type: {self.content_type}",
             f"Content-Length: {len(body_bytes)}"
         ]
-        
+
         if session_id:
             headers.append(f"Set-Cookie: sessionid={session_id}; HttpOnly; Path=/")
-        
+
         for key, value in self.headers.items():
             headers.append(f"{key}: {value}")
-        
+
         header_bytes = "\r\n".join(headers).encode() + b"\r\n\r\n"
         return header_bytes + body_bytes
 
@@ -51,6 +52,8 @@ class HTTPServer:
         self.port = port
         self.routes = []
         self.static_handler = StaticFileHandler(static_dir)
+        self.cache: Dict[str, Tuple[float, HTTPResponse]] = {}
+        self.cache_ttl = 60  # segundos
 
     def route(self, path: str, methods: Optional[list] = None):
         if methods is None:
@@ -69,37 +72,37 @@ class HTTPServer:
 
     def parse_request(self, request_text: str) -> Tuple[dict, str]:
         headers_raw, _, body = request_text.partition('\r\n\r\n')
-        headers_lines = headers_raw.splitlines()[1:]  
-        
+        headers_lines = headers_raw.splitlines()[1:]
+
         headers = {}
         for line in headers_lines:
             if ':' in line:
                 key, value = line.split(':', 1)
                 headers[key.strip().lower()] = value.strip()
-        
+
         return headers, body
 
     def get_session(self, headers: dict) -> Tuple[str, dict]:
         cookies = SimpleCookie()
         if 'cookie' in headers:
             cookies.load(headers['cookie'])
-            
+
         session_id = None
         if 'sessionid' in cookies:
             session_id = cookies['sessionid'].value
-            
+
         if not session_id or session_id not in sessions:
             session_id = str(uuid.uuid4())
             sessions[session_id] = {}
-            
+
         return session_id, sessions[session_id]
 
     async def parse_body(self, method: str, headers: dict, body: str) -> Optional[Any]:
         if method != 'POST':
             return None
-            
+
         content_type = headers.get('content-type', '')
-        
+
         if 'application/x-www-form-urlencoded' in content_type:
             parsed = urllib.parse.parse_qs(body)
             return {k: v[0] if len(v) == 1 else v for k, v in parsed.items()}
@@ -108,13 +111,35 @@ class HTTPServer:
                 return json.loads(body)
             except json.JSONDecodeError:
                 return None
-        
+
         return body
+
+    def get_from_cache(self, key: str) -> Optional[HTTPResponse]:
+        entry = self.cache.get(key)
+        if entry:
+            timestamp, response = entry
+            if time.time() - timestamp < self.cache_ttl:
+                print(f"[CACHE] Usando caché para {key}")
+                return response
+            else:
+                print(f"[CACHE] Expirada caché para {key}")
+                del self.cache[key]
+        return None
+
+
+    def set_cache(self, key: str, response: HTTPResponse):
+        print(f"[CACHE] Guardando cache para {key}")
+        self.cache[key] = (time.time(), response)
+
 
     async def handle_static(self, path: str) -> Optional[HTTPResponse]:
         if not path.startswith('/static/'):
             return None
-            
+
+        cached = self.get_from_cache(path)
+        if cached:
+            return cached
+
         result = await self.static_handler.handle_static_request(path[len('/static/'):])
         if not result:
             return HTTPResponse(
@@ -122,14 +147,17 @@ class HTTPServer:
                 status="404 Not Found",
                 content_type="text/plain"
             )
-            
+
         headers, content = result
         content_type = headers.get('Content-Type', 'application/octet-stream')
-        return HTTPResponse(
+        response = HTTPResponse(
             body=content,
             content_type=content_type,
-            headers={k:v for k,v in headers.items() if k.lower() != 'content-type'}
+            headers={k: v for k, v in headers.items() if k.lower() != 'content-type'}
         )
+
+        self.set_cache(path, response)
+        return response
 
     async def handle_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter):
         try:
@@ -195,7 +223,7 @@ class HTTPServer:
                     kwargs = {k: v for k, v in kwargs.items() if k in handler_params}
 
                     result = await handler(**kwargs)
-                    
+
                     if isinstance(result, HTTPResponse):
                         response = result
                     elif isinstance(result, tuple):
@@ -203,6 +231,9 @@ class HTTPServer:
                         response = HTTPResponse(body, status or "200 OK", headers=headers)
                     else:
                         response = HTTPResponse(str(result))
+
+                    if method == 'GET':
+                        self.set_cache(path, response)
 
                 except Exception as e:
                     print(f"[ERROR] En handler: {e}")
@@ -233,9 +264,9 @@ class HTTPServer:
             await writer.wait_closed()
 
     async def send_response(
-        self, 
-        writer: asyncio.StreamWriter, 
-        response: HTTPResponse, 
+        self,
+        writer: asyncio.StreamWriter,
+        response: HTTPResponse,
         session_id: Optional[str] = None
     ):
         writer.write(response.encode(session_id))
@@ -245,14 +276,14 @@ class HTTPServer:
         print("Rutas registradas:")
         for route in self.routes:
             print(f"{route['methods'][0]} {route['pattern'].pattern}")
-            
+
         server = await asyncio.start_server(
             self.handle_client,
             self.host,
             self.port
         )
-        
+
         print(f"Server running on http://{self.host}:{self.port}")
-        
+
         async with server:
             await server.serve_forever()
