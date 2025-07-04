@@ -23,7 +23,7 @@
 ## 📦 Instalación
 
 ```bash
-git clone https://github.com/tu_usuario/rols
+git clone https://github.com/drxcodev2/rols
 cd rols
 python3 dev.py
 ```
