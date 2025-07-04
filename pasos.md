@@ -120,36 +120,3 @@ Objetivo: Integrar WebAssembly en frontend, añadir websockets y mejorar rendimi
 
         Tests de integración y de extremo a extremo (E2E).
 
-Fase 4: Escalabilidad, comunidad y documentación
-
-Objetivo: Hacer el framework estable, documentado y atractivo para usuarios.
-
-    Optimización y rendimiento
-
-        Revisión del servidor para alto rendimiento.
-
-        Caching y compresión.
-
-    Documentación completa
-
-        Tutoriales paso a paso.
-
-        Ejemplos de proyectos reales.
-
-    Sistema de plugins o extensiones
-
-        Permite añadir funcionalidades sin modificar core.
-
-    Open source
-
-        Publica el código en GitHub.
-
-        Establece CONTRIBUTING.md y código de conducta.
-
-        Busca feedback y colaboradores.
-
-    Comunicación y marketing
-
-        Crea página web del proyecto.
-
-        Publica en foros y redes para atraer usuarios.
