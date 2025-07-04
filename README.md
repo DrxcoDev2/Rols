@@ -25,7 +25,7 @@
 ```bash
 git clone https://github.com/tu_usuario/rols
 cd rols
-python backend/server.py
+python3 dev.py
 ```
 # 🧪 Estructura de proyecto
 ```
