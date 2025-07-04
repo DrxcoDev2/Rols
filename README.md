@@ -72,3 +72,8 @@ if __name__ == "__main__":
 <p>Acceso limitado.</p>
 {% endif %}
 ```
+# 🤝 Contribuye
+¿Quieres contribuir? Empieza con estos issues:
+- [ ] Crear soporte para rutas dinámicas con parámetros
+- [ ] Añadir renderizado condicional avanzado
+- [ ] Mejorar documentación del motor de plantillas
