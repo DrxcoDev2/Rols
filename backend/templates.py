@@ -47,7 +47,6 @@ class SimpleTemplate:
                     skip_line = False if not stack else not stack[-1][1]
 
                 elif tag == 'for':
-                    # Parse for variable and iterable
                     var_iter = expr.split(' in ')
                     if len(var_iter) != 2:
                         raise SyntaxError("Malformed for tag")
@@ -65,8 +64,6 @@ class SimpleTemplate:
                     idx += 1
                     if idx < len(iterable):
                         stack[-1] = ('for', var_name, iterable, idx)
-                        # Rewind to start of for block
-                        # Find the line after the for tag
                         for_back = i
                         while for_back > 0:
                             if self.tag_pattern.search(self.lines[for_back]):
@@ -75,7 +72,6 @@ class SimpleTemplate:
                                     break
                             for_back -= 1
                         i = for_back
-                        # Update context variable
                         context[var_name] = iterable[idx]
                     else:
                         stack.pop()
@@ -83,7 +79,6 @@ class SimpleTemplate:
                     i += 1
                     continue
                 else:
-                    # Otros tags ignorados
                     pass
 
                 i += 1
@@ -93,7 +88,7 @@ class SimpleTemplate:
                 i += 1
                 continue
 
-            # Reemplazar variables {{ var }}
+
             def replace_var(m):
                 var_name = m.group(1)
                 return str(context.get(var_name, ''))
