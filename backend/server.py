@@ -2,7 +2,7 @@ import asyncio
 import re
 import uuid
 
-# Define la funci�n parse_cookies fuera de la clase, antes de usarla
+# Función para parsear cookies
 def parse_cookies(cookie_header):
     cookies = {}
     if not cookie_header:
@@ -14,6 +14,7 @@ def parse_cookies(cookie_header):
             cookies[k] = v
     return cookies
 
+# Sesiones simples en memoria
 sessions = {}
 
 class HTTPServer:
@@ -31,74 +32,93 @@ class HTTPServer:
         return decorator
 
     async def handle_client(self, reader, writer):
-        data = await reader.read(65536)
-        request_text = data.decode(errors='ignore')
-        request_line = request_text.splitlines()[0]
-        method, path, _ = request_line.split()
+        try:
+            data = await reader.read(65536)
+            request_text = data.decode(errors='ignore')
 
-        headers, _, body = request_text.partition('\r\n\r\n')
-        headers_lines = headers.splitlines()[1:]  # Saltar request line
-        headers_dict = {}
-        for line in headers_lines:
-            if ':' in line:
-                k, v = line.split(':', 1)
-                headers_dict[k.strip().lower()] = v.strip()
+            if not request_text.strip():
+                writer.close()
+                return
 
-        cookie_header = headers_dict.get('cookie')
-        cookies = parse_cookies(cookie_header)
+            request_line = request_text.splitlines()[0]
+            method, path, _ = request_line.split()
 
-        # Buscar sessionid en cookies
-        session_id = cookies.get('sessionid')
-        if session_id is None or session_id not in sessions:
-            # Crear sesi�n nueva
-            session_id = str(uuid.uuid4())
-            sessions[session_id] = {}
+            headers, _, body = request_text.partition('\r\n\r\n')
+            headers_lines = headers.splitlines()[1:]
+            headers_dict = {}
+            for line in headers_lines:
+                if ':' in line:
+                    k, v = line.split(':', 1)
+                    headers_dict[k.strip().lower()] = v.strip()
 
-        session = sessions[session_id]
+            cookie_header = headers_dict.get('cookie')
+            cookies = parse_cookies(cookie_header)
 
-        handler = None
-        path_params = {}
+            # Manejo de sesión
+            session_id = cookies.get('sessionid')
+            if session_id is None or session_id not in sessions:
+                session_id = str(uuid.uuid4())
+                sessions[session_id] = {}
 
-        for route in self.routes:
-            if route['method'] == method:
-                match = route['pattern'].match(path)
-                if match:
-                    handler = route['handler']
-                    path_params = match.groupdict()
-                    break
+            session = sessions[session_id]
 
-        parsed_body = None
-        if method == 'POST':
-            content_type = headers_dict.get('content-type','')
-            if 'application/x-www-form-urlencoded' in content_type:
-                import urllib.parse
-                parsed_body = urllib.parse.parse_qs(body)
-                parsed_body = {k: v[0] if len(v) == 1 else v for k,v in parsed_body.items()}
-            elif 'application/json' in content_type:
-                import json
+            handler = None
+            path_params = {}
+
+            for route in self.routes:
+                if route['method'] == method:
+                    match = route['pattern'].match(path)
+                    if match:
+                        handler = route['handler']
+                        path_params = match.groupdict()
+                        break
+
+            parsed_body = None
+            if method == 'POST':
+                content_type = headers_dict.get('content-type', '')
+                if 'application/x-www-form-urlencoded' in content_type:
+                    import urllib.parse
+                    parsed_body = urllib.parse.parse_qs(body)
+                    parsed_body = {k: v[0] if len(v) == 1 else v for k, v in parsed_body.items()}
+                elif 'application/json' in content_type:
+                    import json
+                    try:
+                        parsed_body = json.loads(body)
+                    except:
+                        parsed_body = None
+                else:
+                    parsed_body = body
+
+            if handler:
                 try:
-                    parsed_body = json.loads(body)
-                except:
-                    parsed_body = None
+                    response_body = await handler(**path_params, body=parsed_body, session=session)
+                    response = (
+                        "HTTP/1.1 200 OK\r\n"
+                        "Content-Type: text/html\r\n"
+                        f"Set-Cookie: sessionid={session_id}; HttpOnly; Path=/\r\n"
+                        f"Content-Length: {len(response_body.encode())}\r\n"
+                        "\r\n"
+                        f"{response_body}"
+                    )
+                except Exception as handler_error:
+                    print(f"[ERROR] En handler: {handler_error}")
+                    response = (
+                        "HTTP/1.1 500 Internal Server Error\r\n"
+                        "Content-Type: text/plain\r\n"
+                        "\r\n"
+                        "Internal Server Error"
+                    )
             else:
-                parsed_body = body
+                response = "HTTP/1.1 404 Not Found\r\n\r\nRoute not found"
 
-        if handler:
-            response_body = await handler(**path_params, body=parsed_body, session=session)
-            response = (
-                "HTTP/1.1 200 OK\r\n"
-                "Content-Type: text/html\r\n"
-                f"Set-Cookie: sessionid={session_id}; HttpOnly; Path=/\r\n"
-                f"Content-Length: {len(response_body.encode())}\r\n"
-                "\r\n"
-                f"{response_body}"
-            )
-        else:
-            response = "HTTP/1.1 404 Not Found\r\n\r\nRoute not found"
+            writer.write(response.encode())
+            await writer.drain()
 
-        writer.write(response.encode())
-        await writer.drain()
-        writer.close()
+        except Exception as general_error:
+            print(f"[ERROR] En el servidor: {general_error}")
+        finally:
+            writer.close()
+            await writer.wait_closed()
 
     async def run(self):
         print("Rutas registradas:")
@@ -108,14 +128,3 @@ class HTTPServer:
         print(f"Server running on http://{self.host}:{self.port}")
         async with server:
             await server.serve_forever()
-
-
-
-from handlers import index, login
-
-server = HTTPServer()
-
-server.route("/", method="GET")(index)
-server.route("/login", method="POST")(login)
-
-asyncio.run(server.run())
