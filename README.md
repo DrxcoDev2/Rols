@@ -6,7 +6,7 @@
 ![Static Badge](https://img.shields.io/github/stars/drxcodev2/rols)
 ![Static Gadge MIT](https://img.shields.io/badge/licencia-MIT-orange?style=flat)
 ![Static Gadge Python](https://img.shields.io/badge/python-3.9-blue?style=flat)
-![Version](https://img.shields.io/badge/version-1.0.0-green?style=flat)
+![Version](https://img.shields.io/badge/version-1.0.5-green?style=flat)
 
 ## 🚀 Características
 
